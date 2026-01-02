@@ -1,0 +1,491 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Plus, 
+  Trash2, 
+  TrendingDown, 
+  Package, 
+  Scissors, 
+  History, 
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  ArrowLeft,
+  Beef,
+  Bird,
+  Fish,
+  PiggyBank,
+  Printer,
+  Download
+} from 'lucide-react';
+
+// Categorias de Proteína
+const PROTEIN_TYPES = [
+  { id: 'Bovino', label: 'Bovino', icon: <Beef size={18} /> },
+  { id: 'Ave', label: 'Ave', icon: <Bird size={18} /> },
+  { id: 'Peixe', label: 'Peixe', icon: <Fish size={18} /> },
+  { id: 'Suíno', label: 'Suíno', icon: <PiggyBank size={18} /> }
+];
+
+// Tipos de cortes comuns
+const CUT_TYPES = [
+  'Filé / Bife', 'Cubos', 'Iscas', 'Moído', 'Medalhão', 'Sobrecoxa Desossada', 'Filé de Peixe', 'Aparas (Aproveitável)', 'Gordura/Descarte'
+];
+
+const INITIAL_STOCK = [
+  { id: '1', name: 'Contra-Filé Inteiro', weight: 45.5, protein: 'Bovino', category: 'Bruto' },
+  { id: '2', name: 'Peito de Frango', weight: 12.0, protein: 'Ave', category: 'Bruto' },
+  { id: '3', name: 'Salmão Inteiro', weight: 8.5, protein: 'Peixe', category: 'Bruto' },
+];
+
+const App = () => {
+  const [stock, setStock] = useState(INITIAL_STOCK);
+  const [history, setHistory] = useState([]);
+  const [view, setView] = useState('dashboard');
+  const [filter, setFilter] = useState('Todos');
+
+  // Form States
+  const [newEntry, setNewEntry] = useState({ name: '', weight: '', protein: 'Bovino', category: 'Bruto' });
+  const [production, setProduction] = useState({ 
+    sourceId: '', 
+    cuts: [{ type: 'Filé / Bife', weight: '' }],
+    waste: '' 
+  });
+
+  // Calculations
+  const filteredStock = useMemo(() => {
+    if (filter === 'Todos') return stock;
+    return stock.filter(s => s.protein === filter);
+  }, [stock, filter]);
+
+  const totalStockWeight = useMemo(() => stock.reduce((acc, item) => acc + item.weight, 0), [stock]);
+  
+  // Função para Impressão / Gerar PDF
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleAddEntry = (e) => {
+    e.preventDefault();
+    if (!newEntry.name || !newEntry.weight) return;
+    
+    const item = {
+      id: Date.now().toString(),
+      name: newEntry.name,
+      weight: parseFloat(newEntry.weight),
+      protein: newEntry.protein,
+      category: newEntry.category
+    };
+    
+    setStock([...stock, item]);
+    setHistory([{
+      id: Date.now(),
+      type: 'ENTRADA',
+      item: item.name,
+      protein: item.protein,
+      weight: item.weight,
+      date: new Date().toLocaleString()
+    }, ...history]);
+    
+    setNewEntry({ name: '', weight: '', protein: 'Bovino', category: 'Bruto' });
+    setView('dashboard');
+  };
+
+  const handleProduction = (e) => {
+    e.preventDefault();
+    const source = stock.find(s => s.id === production.sourceId);
+    if (!source) return;
+
+    const totalProduced = production.cuts.reduce((acc, c) => acc + parseFloat(c.weight || 0), 0);
+    const waste = parseFloat(production.waste || 0);
+    
+    let newStock = stock.filter(s => s.id !== source.id);
+    
+    production.cuts.forEach((cut, index) => {
+      if (parseFloat(cut.weight) > 0) {
+        newStock.push({
+          id: `cut-${Date.now()}-${index}`,
+          name: `${source.name} - ${cut.type}`,
+          weight: parseFloat(cut.weight),
+          protein: source.protein,
+          category: 'Corte'
+        });
+      }
+    });
+
+    setStock(newStock);
+    setHistory([{
+      id: Date.now(),
+      type: 'PRODUÇÃO',
+      item: source.name,
+      protein: source.protein,
+      details: `${totalProduced.toFixed(2)}kg produzidos, ${waste.toFixed(2)}kg desperdício`,
+      date: new Date().toLocaleString(),
+      isWaste: waste > 0
+    }, ...history]);
+
+    setView('dashboard');
+    setProduction({ sourceId: '', cuts: [{ type: 'Filé / Bife', weight: '' }], waste: '' });
+  };
+
+  const addCutRow = () => {
+    setProduction({...production, cuts: [...production.cuts, { type: 'Filé / Bife', weight: '' }]});
+  };
+
+  const getProteinIcon = (type) => {
+    switch(type) {
+      case 'Bovino': return <Beef className="text-red-600" size={18} />;
+      case 'Ave': return <Bird className="text-orange-500" size={18} />;
+      case 'Peixe': return <Fish className="text-blue-500" size={18} />;
+      case 'Suíno': return <PiggyBank className="text-pink-500" size={18} />;
+      default: return <Package size={18} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-8 overflow-x-hidden">
+      {/* Estilos para Impressão */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          body { background: white; pading: 0; }
+          .max-w-4xl { max-width: 100%; width: 100%; margin: 0; }
+          .shadow-sm, .shadow-lg { shadow: none !important; border: 1px solid #eee; }
+          .print-header { display: block !important; border-bottom: 2px solid #333; margin-bottom: 20px; padding-bottom: 10px; }
+        }
+        .print-only { display: none; }
+      `}</style>
+
+      <div className="max-w-4xl mx-auto">
+        {/* Header para PDF (Apenas Impressão) */}
+        <div className="print-only print-header">
+          <h1 className="text-3xl font-bold">Relatório de Estoque - Magarefe Pro</h1>
+          <p>Data de Emissão: {new Date().toLocaleString()}</p>
+        </div>
+
+        {/* Header Principal */}
+        <header className="flex justify-between items-center mb-8 no-print">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">Magarefe Pro</h1>
+            <p className="text-slate-500 text-sm">Gestão de Produção & PDF</p>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={handlePrint}
+              title="Gerar PDF / Imprimir"
+              className="p-2 bg-white border rounded-lg shadow-sm hover:bg-slate-50 text-blue-600 flex items-center gap-2"
+            >
+              <Printer size={20} />
+              <span className="hidden md:inline text-sm font-bold">PDF</span>
+            </button>
+            <button 
+              onClick={() => setView('history')}
+              className="p-2 bg-white border rounded-lg shadow-sm hover:bg-slate-50"
+            >
+              <History size={20} className="text-slate-600" />
+            </button>
+          </div>
+        </header>
+
+        {/* Stats & Actions */}
+        {view === 'dashboard' && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 no-print">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase">Estoque Total</p>
+                  <p className="text-2xl font-bold">{totalStockWeight.toFixed(2)} kg</p>
+                </div>
+                <Package className="text-blue-600 opacity-20" size={40} />
+              </div>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase">Perda Técnica</p>
+                  <p className="text-2xl font-bold text-orange-600">11.2%</p>
+                </div>
+                <TrendingDown className="text-orange-600 opacity-20" size={40} />
+              </div>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase">Status</p>
+                  <p className="text-2xl font-bold text-green-600">Operacional</p>
+                </div>
+                <CheckCircle2 className="text-green-600 opacity-20" size={40} />
+              </div>
+            </div>
+
+            <div className="flex gap-4 mb-8 no-print">
+              <button 
+                onClick={() => setView('entry')}
+                className="flex-1 bg-blue-600 text-white py-4 px-6 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition"
+              >
+                <Plus size={20} /> Nova Entrada
+              </button>
+              <button 
+                onClick={() => setView('production')}
+                className="flex-1 bg-slate-800 text-white py-4 px-6 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-900 transition"
+              >
+                <Scissors size={20} /> Iniciar Produção
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-2 no-print">
+              {['Todos', ...PROTEIN_TYPES.map(p => p.id)].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setFilter(t)}
+                  className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${
+                    filter === t ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Stock List (Será impresso no PDF) */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 border-b bg-slate-50 flex justify-between items-center no-print">
+                <h2 className="font-bold text-slate-700">Inventário em Tempo Real</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {filteredStock.length === 0 ? (
+                  <div className="p-12 text-center no-print">
+                    <Package size={40} className="mx-auto text-slate-200 mb-2" />
+                    <p className="text-slate-400">Nenhum item encontrado nesta categoria.</p>
+                  </div>
+                ) : (
+                  filteredStock.map(item => (
+                    <div key={item.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center no-print">
+                          {getProteinIcon(item.protein)}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800">{item.name}</p>
+                          <div className="flex gap-2">
+                             <span className="text-[10px] font-bold uppercase text-slate-400">{item.protein}</span>
+                             <span className="text-[10px] font-bold uppercase px-1.5 bg-slate-100 text-slate-500 rounded">{item.category}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg">{item.weight.toFixed(2)} <span className="text-xs font-normal text-slate-500 text-sm">kg</span></p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Rodapé do PDF (Apenas Impressão) */}
+            <div className="print-only mt-12 pt-4 border-t border-slate-200 text-center text-sm text-slate-500">
+              Gerado automaticamente pelo Magarefe Pro App
+            </div>
+          </>
+        )}
+
+        {/* Entry Form */}
+        {view === 'entry' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 animate-in fade-in duration-300 no-print">
+            <button onClick={() => setView('dashboard')} className="mb-4 text-slate-500 flex items-center gap-1 hover:text-slate-800">
+              <ArrowLeft size={18} /> Voltar ao Painel
+            </button>
+            <h2 className="text-xl font-bold mb-6">Registrar Entrada de Matéria-Prima</h2>
+            <form onSubmit={handleAddEntry} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Proteína</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PROTEIN_TYPES.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setNewEntry({...newEntry, protein: p.id})}
+                        className={`flex items-center gap-2 p-3 border rounded-lg transition ${
+                          newEntry.protein === p.id ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600'
+                        }`}
+                      >
+                        {p.icon} <span className="text-sm font-bold">{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                   <label className="block text-sm font-bold text-slate-700 mb-1">Nome da Peça / Lote</label>
+                   <input 
+                    type="text" 
+                    value={newEntry.name}
+                    onChange={(e) => setNewEntry({...newEntry, name: e.target.value})}
+                    className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Ex: Picanha Argentina, Filé de Tilápia..."
+                    required
+                  />
+                  <div className="mt-4">
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Peso Total (kg)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      value={newEntry.weight}
+                      onChange={(e) => setNewEntry({...newEntry, weight: e.target.value})}
+                      className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200">
+                Confirmar Recebimento
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Production Form */}
+        {view === 'production' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 animate-in fade-in duration-300 no-print">
+            <button onClick={() => setView('dashboard')} className="mb-4 text-slate-500 flex items-center gap-1 hover:text-slate-800">
+              <ArrowLeft size={18} /> Voltar ao Painel
+            </button>
+            <h2 className="text-xl font-bold mb-6">Processo de Magarefe (Desossa / Corte)</h2>
+            <form onSubmit={handleProduction} className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Peça Bruta para Processamento</label>
+                <select 
+                  value={production.sourceId}
+                  onChange={(e) => setProduction({...production, sourceId: e.target.value})}
+                  className="w-full p-3 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-slate-800"
+                  required
+                >
+                  <option value="">Selecione do estoque...</option>
+                  {stock.filter(s => s.category === 'Bruto').map(s => (
+                    <option key={s.id} value={s.id}>[{s.protein}] {s.name} - {s.weight}kg disponível</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h3 className="font-bold text-slate-700">Porcionamento</h3>
+                  <button 
+                    type="button" 
+                    onClick={addCutRow}
+                    className="text-xs bg-slate-100 px-3 py-1 rounded-full text-blue-600 flex items-center gap-1 font-bold hover:bg-blue-50"
+                  >
+                    <Plus size={14} /> Novo Corte
+                  </button>
+                </div>
+                
+                {production.cuts.map((cut, idx) => (
+                  <div key={idx} className="flex gap-2 items-end bg-slate-50 p-3 rounded-lg border border-dashed">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Corte</label>
+                      <select 
+                        value={cut.type}
+                        onChange={(e) => {
+                          const newCuts = [...production.cuts];
+                          newCuts[idx].type = e.target.value;
+                          setProduction({...production, cuts: newCuts});
+                        }}
+                        className="w-full p-2 border rounded-lg text-sm outline-none"
+                      >
+                        {CUT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    </div>
+                    <div className="w-24">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Peso (kg)</label>
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        value={cut.weight}
+                        onChange={(e) => {
+                          const newCuts = [...production.cuts];
+                          newCuts[idx].weight = e.target.value;
+                          setProduction({...production, cuts: newCuts});
+                        }}
+                        className="w-full p-2 border rounded-lg text-sm outline-none font-bold"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                    {production.cuts.length > 1 && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const newCuts = production.cuts.filter((_, i) => i !== idx);
+                          setProduction({...production, cuts: newCuts});
+                        }}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 bg-orange-50 border border-orange-100 rounded-lg">
+                <div className="flex items-center gap-2 text-orange-700 mb-2">
+                  <AlertCircle size={18} />
+                  <span className="font-bold text-sm">Desperdício / Quebra de Processo</span>
+                </div>
+                <div className="flex gap-2 items-center">
+                   <input 
+                    type="number" 
+                    step="0.01"
+                    value={production.waste}
+                    onChange={(e) => setProduction({...production, waste: e.target.value})}
+                    className="flex-1 p-2 border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="Peso descartado (limpeza, ossos, escamas...)"
+                    required
+                  />
+                  <span className="font-bold text-orange-700 text-sm">kg</span>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition shadow-lg">
+                Finalizar e Atualizar Estoque
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* History List */}
+        {view === 'history' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 animate-in fade-in duration-300 no-print">
+            <button onClick={() => setView('dashboard')} className="mb-4 text-slate-500 flex items-center gap-1 hover:text-slate-800">
+              <ArrowLeft size={18} /> Voltar
+            </button>
+            <h2 className="text-xl font-bold mb-6">Log de Produção e Entradas</h2>
+            <div className="space-y-4">
+              {history.map(item => (
+                <div key={item.id} className="flex gap-4 border-b pb-4">
+                  <div className="w-10 h-10 bg-slate-50 rounded flex items-center justify-center shrink-0">
+                    {getProteinIcon(item.protein)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between">
+                      <h4 className="font-bold text-slate-800">{item.item}</h4>
+                      <span className="text-[10px] text-slate-400">{item.date}</span>
+                    </div>
+                    <p className="text-sm text-slate-600">{item.details || `${item.weight}kg adicionados`}</p>
+                    {item.isWaste && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded mt-1">
+                        REGISTRO DE QUEBRA
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default App;
+
